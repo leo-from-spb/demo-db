@@ -30,32 +30,60 @@ from Country_ISO
 with check option;
 
 
-create table Country_Population
+create table Country_ISO_Area
 (
     Iso_Num smallint not null,
     Year smallint not null,
-    Population numeric(8,4) not null,
+    Area numeric(11) not null,
     primary key (Iso_Num, Year),
     foreign key (Iso_Num) references Country_ISO(Iso_Num)
 );
 
 
-select Iso_Num, Year, Population
-from Country_Population;
-
-
-create materialized view Country_Population_Actual as
+create materialized view Country_ISO_Area_Last as
 select distinct Iso_Num,
-                first_value(Year) over C as Year,
-                first_value(Population) over C  as Population
-from Country_Population
+                first_value(Year) over C as Area_Year,
+                first_value(Area) over C as Area
+from Country_ISO_Area
 window C as (partition by Iso_Num order by Year desc);
 
-refresh materialized view Country_Population_Actual;
+refresh materialized view Country_ISO_Area_Last;
 
-create unique index Country_Population_Actual_Iso_ui on Country_Population_Actual (Iso_Num);
+create unique index Country_ISO_Area_Last_Iso_ui on Country_ISO_Area_Last (Iso_Num);
 
 
-create view Country_ISO_P as
-select C.*, P.Population, P.Year as Population_Year
-from Country_ISO C join Country_Population_Actual P using (Iso_Num);
+create table Country_ISO_Population
+(
+    Iso_Num smallint not null,
+    Year smallint not null,
+    Population bigint not null,
+    primary key (Iso_Num, Year),
+    foreign key (Iso_Num) references Country_ISO(Iso_Num)
+);
+
+
+create materialized view Country_ISO_Population_Last as
+select distinct Iso_Num,
+                first_value(Year) over C as Population_Year,
+                first_value(Population) over C as Population
+from Country_ISO_Population
+window C as (partition by Iso_Num order by Year desc);
+
+refresh materialized view Country_ISO_Population_Last;
+
+create unique index Country_ISO_Population_Last_Iso_ui on Country_ISO_Population_Last (Iso_Num);
+
+
+create view Country_ISO_F as
+select C.*,
+       A.Area, A.Area_Year,
+       P.Population, P.Population_Year,
+       round(case when A.Area > 0 and P.Population > 0
+                  then P.Population * 1.0 / A.Area
+                  end::numeric, 3) as Population_Density
+from Country_ISO_FN C
+    left join Country_ISO_Area_Last A using (Iso_Num)
+    left join Country_ISO_Population_Last P using (Iso_Num);
+
+
+        
